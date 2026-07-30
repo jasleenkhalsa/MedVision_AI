@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MedVision AI — Medical Imaging Agent</title>
+  <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+
+<!-- ══════════════════ HEADER ══════════════════ -->
+<header class="header">
+  <div class="header-left">
+    <div class="app-icon">🔬</div>
+    <div>
+      <div class="app-title">MedVision AI</div>
+      <div class="app-subtitle">Medical Imaging Agent</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <span class="model-badge" id="model-badge">LLM</span>
+    <div class="online-badge">
+      <div class="online-dot" id="online-dot"></div>
+      <span id="online-label">Online</span>
+    </div>
+  </div>
+</header>
+
+
+<!-- ══════════════════ APP ══════════════════ -->
+<div class="app">
+
+  <!-- ════════════════════════════════════════
+       LEFT PANEL — Upload + Analysis
+       ════════════════════════════════════════ -->
+  <div class="panel" style="position:relative">
+
+    <!-- Header -->
+    <div class="panel-header">
+      <div class="panel-title">
+        <div class="panel-title-icon icon-blue">🫁</div>
+        Medical Image Analysis
+      </div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <select id="model-sel"
+          style="font-size:11px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);color:var(--text-mid);outline:none;cursor:pointer">
+          <option value="brain_tumor">🧠 Brain Tumor — YOLOv8</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Upload zone -->
+    <div class="upload-area" id="upload-area">
+      <label class="upload-zone" id="upload-zone">
+        <input type="file" id="file-input" accept="image/*">
+        <div class="upload-zone-icon">🖼️</div>
+        <div class="upload-zone-title">Upload Medical Image</div>
+        <div class="upload-zone-sub">Drag &amp; drop or click to browse</div>
+        <div class="upload-zone-types">Supports X-Ray, CT-SCAN & MRI</div>
+      </label>
+    </div>
+
+    <!-- Image preview (hidden until upload) -->
+    <div class="image-preview-wrap" id="preview-wrap">
+      <div class="preview-header">
+        <span class="preview-label" id="preview-name">image.jpg</span>
+        <div class="preview-actions">
+          <button class="icon-btn" onclick="doZoom(1.2)"  title="Zoom In (+)">+</button>
+          <button class="icon-btn" onclick="doZoom(0.83)" title="Zoom Out (-)">−</button>
+          <button class="icon-btn" onclick="resetView()"  title="Reset (0)">⟳</button>
+          <button class="icon-btn" onclick="invertImg()"  title="Invert (i)" id="invert-btn">☀</button>
+          <button class="icon-btn" onclick="changeImage()" title="Change image" style="color:var(--rose)">✕</button>
+        </div>
+      </div>
+
+      <div class="preview-img-container" id="preview-img-container">
+        <img id="preview-img" src="" alt="Uploaded MRI">
+        <div id="zoom-ind" style="position:absolute;bottom:8px;left:50%;transform:translateX(-50%);font-family:var(--mono);font-size:10px;color:#fff;background:rgba(0,0,0,.5);padding:2px 8px;border-radius:10px;opacity:0;transition:opacity .3s;pointer-events:none">100%</div>
+      </div>
+    </div>
+
+
+    <!-- Run button -->
+    <div class="run-area">
+      <button class="run-btn" id="run-btn" onclick="runPipeline()">
+        <span>🔬</span>
+        <span>Analyze Image</span>
+      </button>
+    </div>
+
+    <!-- Summary cards -->
+    <div class="summary-area">
+      <div class="summary-title">Analysis Summary</div>
+      <div class="summary-grid">
+
+        <div class="summary-card">
+          <div class="sc-label"><span class="sc-label-icon">🫁</span> Modality</div>
+          <div class="sc-value empty" id="card-modality">—</div>
+        </div>
+
+        <div class="summary-card">
+          <div class="sc-label"><span class="sc-label-icon">⚡</span> Confidence</div>
+          <div class="sc-value empty" id="card-confidence">—</div>
+        </div>
+
+        <div class="summary-card">
+          <div class="sc-label"><span class="sc-label-icon">📋</span> Findings</div>
+          <div class="sc-value empty" id="card-findings">—</div>
+        </div>
+
+        <div class="summary-card">
+          <div class="sc-label"><span class="sc-label-icon">⚠️</span> Urgency</div>
+          <div class="sc-value empty" id="card-urgency">—</div>
+        </div>
+
+      </div>
+
+      <!-- Detection badges -->
+      <div id="badge-row" style="display:none;margin-top:10px">
+        <div class="sc-label" style="margin-bottom:6px"><span class="sc-label-icon">🎯</span> </div>
+        <div class="det-badges" id="det-badges"></div>
+      </div>
+
+      <div style="text-align:center;font-size:11px;color:var(--text-dim);margin-top:10px" id="summary-hint">
+        Upload an image and start a conversation to see analysis results
+      </div>
+    </div>
+
+    <!-- Full report (scrollable) -->
+    <div class="report-scroll" id="report-scroll">
+      <div class="report-placeholder">
+        <span class="report-placeholder-icon">📋</span>
+        Upload an image and click <strong>Analyze</strong> to generate a full clinical report
+        including diagnosis, stage, treatment options, medicines, and prognosis.
+      </div>
+    </div>
+
+    <!-- Disclaimer -->
+    <div class="disclaimer">
+      ⚠ For research &amp; educational use only. Not a certified medical device. Always consult qualified specialists.
+    </div>
+
+    <!-- Processing overlay -->
+    <div class="proc-overlay" id="proc-overlay">
+      <div class="proc-spinner"></div>
+      <div class="proc-label" id="proc-label">Analyzing…</div>
+      <div class="proc-steps">
+        <div class="ps" id="ps1">UPLOAD</div>
+        <div class="ps" id="ps2">YOLO</div>
+        <div class="ps" id="ps3">RAG</div>
+        <div class="ps" id="ps4">LLM</div>
+      </div>
+    </div>
+
+  </div><!-- /left panel -->
+
+
+  <!-- ════════════════════════════════════════
+       RIGHT PANEL — Chat Assistant
+       ════════════════════════════════════════ -->
+  <div class="panel chat-panel">
+
+    <!-- Header -->
+    <div class="panel-header">
+      <div class="panel-title">
+        <div class="panel-title-icon icon-teal">🤖</div>
+        Medical Imaging Assistant
+      </div>
+    </div>
+
+    <!-- Quick chips -->
+    <div class="chip-row">
+      <div class="chip" onclick="sendChip('What imaging modalities do you support?')">What modalities do you support?</div>
+      <div class="chip" onclick="sendChip('How does the RAG system work?')">How does RAG work?</div>
+      <div class="chip" onclick="sendChip('What can you help me analyze?')">What can you analyze?</div>
+      <div class="chip" onclick="sendChip('What are the treatment options for glioma?')">Glioma treatment?</div>
+      <div class="chip" onclick="sendChip('Find neurosurgeons in Mumbai')">Specialists in Mumbai</div>
+    </div>
+
+    <!-- Messages -->
+    <div class="chat-messages" id="chat-messages">
+
+      <!-- Welcome state -->
+      <div class="chat-welcome" id="chat-welcome">
+        <div class="chat-welcome-icon">🤖</div>
+        <h3>Medical Imaging Assistant</h3>
+        <p>Upload a medical image and ask me to analyze it, or ask questions about medical imaging.</p>
+        <div class="feature-pills">
+          <div class="feature-pill" onclick="sendChip('What imaging modalities do you support?')">What imaging modalities do you support?</div>
+          <div class="feature-pill" onclick="sendChip('How does the RAG system work?')">How does the RAG system work?</div>
+          <div class="feature-pill" onclick="sendChip('What can you help me analyze?')">What can you help me analyze?</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Input -->
+    <div class="chat-input-area">
+      <textarea class="chat-input" id="chat-inp" rows="1"
+        placeholder="Ask a medical imaging question… or type a city to find specialists"></textarea>
+      <button class="chat-send" id="chat-send" onclick="sendChat()">
+        ➤
+      </button>
+    </div>
+
+  </div><!-- /right panel -->
+
+</div><!-- /.app -->
+
+<div id="toast-container" class="toast-container"></div>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>

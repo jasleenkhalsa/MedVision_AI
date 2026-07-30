@@ -1,0 +1,11 @@
+venv/
+__pycache__/
+*.pyc
+.env
+
+uploads/
+results/
+
+models/*.pt
+rag_store/*.index
+rag_store/*.json
