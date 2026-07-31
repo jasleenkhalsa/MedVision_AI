@@ -1,179 +1,303 @@
-"""
-rag_engine.py — Medical knowledge retrieval for detected tumor classes
-Provides clinical context injected alongside detection results
-"""
+from __future__ import annotations
 
-import math
-import re
-from typing import List, Dict
+from typing import Any
 
-KNOWLEDGE_BASE = [
-    {
-        "id": "glioma_001",
-        "tags": ["glioma", "brain_tumor", "mri", "glioblastoma"],
-        "title": "Glioma — Overview & Imaging Features",
-        "content": (
-            "Gliomas are primary brain tumors arising from glial cells (astrocytes, oligodendrocytes, ependymal cells). "
-            "They are graded WHO I–IV. Glioblastoma (WHO IV) is the most aggressive. On MRI: irregular ring-enhancing "
-            "mass with central necrosis and surrounding vasogenic edema (T2/FLAIR hyperintense). "
-            "Corpus callosum involvement ('butterfly glioma') is characteristic. Median survival GBM: 14–16 months. "
-            "Treatment: maximal safe resection + temozolomide + radiotherapy (Stupp protocol)."
-        ),
-        "source": "WHO Classification of Tumors of the CNS 2021",
-    },
-    {
-        "id": "glioma_002",
-        "tags": ["glioma", "grading", "diffuse"],
-        "title": "Glioma WHO Grading on Imaging",
-        "content": (
-            "Low-grade gliomas (WHO I–II): non-enhancing, T2 hyperintense, no necrosis, minimal mass effect. "
-            "High-grade (WHO III–IV): irregular enhancement, necrosis, significant edema, crosses midline. "
-            "IDH mutation status (IDH-mutant vs IDH-wildtype) is now central to classification. "
-            "MR spectroscopy shows elevated choline, reduced NAA, lactate peak in high-grade. "
-            "Perfusion MRI (rCBV) correlates with tumor grade."
-        ),
-        "source": "Neuroradiology Essentials 2024",
-    },
-    {
-        "id": "meningioma_001",
-        "tags": ["meningioma", "brain_tumor", "mri", "dural"],
-        "title": "Meningioma — Imaging & Clinical Features",
-        "content": (
-            "Meningiomas arise from arachnoidal cap cells of the meninges. Most common extra-axial intracranial tumor. "
-            "MRI: isointense on T1 and T2 to cortex, homogeneous intense enhancement with Gd, classic dural tail sign. "
-            "Typically well-circumscribed, broad-based dural attachment. May cause adjacent hyperostosis. "
-            "WHO grade I (benign, 80%) vs grade II (atypical) vs grade III (anaplastic). "
-            "Treatment: observation for small/asymptomatic; surgery ± radiosurgery for symptomatic."
-        ),
-        "source": "Neurooncology Reference Atlas 2023",
-    },
-    {
-        "id": "meningioma_002",
-        "tags": ["meningioma", "locations", "differential"],
-        "title": "Meningioma Common Locations & Differentials",
-        "content": (
-            "Common sites: parasagittal/falcine (most common), convexity, sphenoid wing, olfactory groove, "
-            "cerebellopontine angle, tentorial, intraventricular. "
-            "Differentials for extra-axial enhancing mass: dural metastasis, lymphoma, solitary fibrous tumor. "
-            "Calcification on CT in up to 25%. Peritumoral edema more common in high-grade. "
-            "Angiography may show 'sunburst' vascular pattern from external carotid supply."
-        ),
-        "source": "Neurosurgery Imaging Atlas",
-    },
-    {
-        "id": "no_tumor_001",
-        "tags": ["no_tumor", "normal", "brain", "mri"],
-        "title": "Normal Brain MRI Anatomy",
-        "content": (
-            "Normal brain MRI: symmetric gray and white matter differentiation, no focal signal abnormalities, "
-            "no midline shift, normal ventricular size and morphology, intact cortical sulcal pattern. "
-            "T1: gray matter isointense, white matter hyperintense. T2/FLAIR: CSF bright, white matter dark. "
-            "Normal enhancing structures: choroid plexus, pituitary, dural venous sinuses. "
-            "Age-related changes: periventricular white matter T2 hyperintensities and mild cortical atrophy are normal variants."
-        ),
-        "source": "Neuroradiology Atlas 2024",
-    },
-    {
-        "id": "pituitary_001",
-        "tags": ["pituitary", "brain_tumor", "mri", "sellar"],
-        "title": "Pituitary Tumor — Adenoma Imaging",
-        "content": (
-            "Pituitary adenomas are benign tumors of the anterior pituitary. Microadenomas (<10 mm): focal T1 "
-            "hypointense lesion with delayed enhancement on dynamic Gd-MRI. Macroadenomas (>10 mm): may extend "
-            "suprasellarly compressing optic chiasm (bitemporal hemianopia), invade cavernous sinuses. "
-            "Functional adenomas: prolactinoma (most common), GH-secreting (acromegaly), ACTH-secreting (Cushing's). "
-            "Non-functioning adenomas treated surgically (transsphenoidal). Prolactinomas: dopamine agonists first-line."
-        ),
-        "source": "Endocrine Radiology Handbook 2023",
-    },
-    {
-        "id": "pituitary_002",
-        "tags": ["pituitary", "sellar", "differential"],
-        "title": "Sellar Region Differentials",
-        "content": (
-            "Sellar/parasellar mass differentials: pituitary adenoma (most common), craniopharyngioma "
-            "(Rathke cleft cyst, calcification, children/young adults), meningioma (dural tail), "
-            "aneurysm (ICA), germ cell tumor, hypothalamic glioma, metastasis. "
-            "Rathke cleft cyst: T1 hyperintense, no enhancement, intracystic nodule. "
-            "Craniopharyngioma: adamantinomatous (calcification + cysts, pediatric) vs papillary (adults, solid)."
-        ),
-        "source": "Neuroradiology Essentials 2024",
-    },
-    {
-        "id": "yolo_brain_001",
-        "tags": ["yolov26", "detection", "brain_tumor", "ai"],
-        "title": "YOLOv26 Brain Tumor Detection — Model Notes",
-        "content": (
-            "YOLOv26 (You Only Look Once v8) is a real-time object detection architecture by Ultralytics. "
-            "For brain tumor detection, it classifies MRI slices into: Glioma, Meningioma, No Tumor, Pituitary. "
-            "Model inputs: 350×350px resized MRI images. Output: bounding boxes + class + confidence score. "
-            "Confidence threshold (default 0.25) filters low-confidence predictions. "
-            "Performance metrics: mAP@50, precision, recall per class evaluated on held-out test set. "
-            "Always validate AI predictions against radiologist review."
-        ),
-        "source": "Ultralytics YOLOv26 Documentation",
-    },
-]
-
-
-class TFIDFIndex:
-    def __init__(self, docs):
-        self.docs = docs
-        self.idf: dict = {}
-        self.tfidf: list = []
-        self._build()
-
-    def _tok(self, text: str) -> List[str]:
-        sw = {"a","an","the","is","in","on","of","to","and","or","for","with","as","at",
-              "by","this","that","are","was","it","be","from","has","have","can","may","also"}
-        return [w for w in re.findall(r'\b[a-z][a-z0-9]*\b', text.lower())
-                if w not in sw and len(w) > 2]
-
-    def _build(self):
-        N = len(self.docs)
-        df: dict = {}
-        corpus = []
-        for d in self.docs:
-            tokens = self._tok(f"{d['title']} {d['content']} {' '.join(d.get('tags', []))}")
-            corpus.append(tokens)
-            for t in set(tokens):
-                df[t] = df.get(t, 0) + 1
-        self.idf = {t: math.log((N + 1) / (v + 1)) + 1 for t, v in df.items()}
-        for tokens in corpus:
-            tf: dict = {}
-            for t in tokens:
-                tf[t] = tf.get(t, 0) + 1
-            L = len(tokens) or 1
-            self.tfidf.append({t: (c / L) * self.idf.get(t, 1) for t, c in tf.items()})
-
-    def search(self, query: str, top_k: int = 3) -> List[Dict]:
-        q = self._tok(query)
-        scores = {}
-        for i, vec in enumerate(self.tfidf):
-            s = sum(vec.get(t, 0) * self.idf.get(t, 1) for t in q)
-            if s > 0:
-                scores[i] = s
-        ranked = sorted(scores, key=lambda x: scores[x], reverse=True)[:top_k]
-        return [dict(self.docs[i], score=round(scores[i], 4)) for i in ranked]
+import faiss
+import numpy as np
+from sentence_transformers import SentenceTransformer
 
 
 class MedicalRAGEngine:
-    def __init__(self):
-        self.index = TFIDFIndex(KNOWLEDGE_BASE)
+    """
+    Embedding-based medical retrieval engine.
 
-    def get_context(self, detected_classes: List[str], model_key: str) -> List[Dict]:
-        """Return relevant knowledge cards for the detected classes."""
-        query = " ".join(detected_classes) + f" {model_key} brain tumor mri"
-        results = self.index.search(query, top_k=4)
-        return [
-            {
-                "title": r["title"],
-                "content": r["content"],
-                "source": r["source"],
-                "relevance": r["score"],
-            }
-            for r in results
+    Pipeline:
+    Medical passages
+        -> SentenceTransformer embeddings
+        -> FAISS vector index
+        -> semantic retrieval
+    """
+
+    def __init__(self) -> None:
+        print("[RAG] Loading embedding model...")
+
+        self.embedding_model_name = (
+            "sentence-transformers/all-MiniLM-L6-v2"
+        )
+
+        self.embedding_model = SentenceTransformer(
+            self.embedding_model_name
+        )
+
+        self.documents = self._build_knowledge_base()
+
+        self.document_texts = [
+            document["text"] for document in self.documents
         ]
 
-    def search(self, query: str, top_k: int = 5) -> List[Dict]:
-        return self.index.search(query, top_k=top_k)
+        self.index = self._build_index()
+
+        print(
+            f"[RAG] FAISS index created with "
+            f"{self.index.ntotal} medical passages"
+        )
+
+    def _build_knowledge_base(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "id": "glioma_definition",
+                "category": "Glioma",
+                "source": "Clinical knowledge base",
+                "text": (
+                    "Gliomas are tumors that originate from glial cells "
+                    "within the central nervous system. They include several "
+                    "subtypes with different biological behaviours. MRI "
+                    "assessment commonly considers lesion location, signal "
+                    "characteristics, enhancement, surrounding edema, mass "
+                    "effect and infiltration."
+                ),
+            },
+            {
+                "id": "glioma_management",
+                "category": "Glioma",
+                "source": "Clinical knowledge base",
+                "text": (
+                    "A suspected glioma requires specialist interpretation "
+                    "and correlation with clinical history and complete MRI "
+                    "sequences. Additional evaluation may include contrast "
+                    "enhanced MRI, advanced imaging and histopathological "
+                    "assessment. Treatment decisions must be made by the "
+                    "appropriate multidisciplinary clinical team."
+                ),
+            },
+            {
+                "id": "glioma_urgency",
+                "category": "Glioma",
+                "source": "Clinical knowledge base",
+                "text": (
+                    "Urgency for a suspected glioma depends on neurological "
+                    "symptoms, lesion size, edema, hydrocephalus, hemorrhage "
+                    "and mass effect. New neurological deficits, seizures, "
+                    "reduced consciousness or rapid clinical deterioration "
+                    "require urgent medical assessment."
+                ),
+            },
+            {
+                "id": "meningioma_definition",
+                "category": "Meningioma",
+                "source": "Clinical knowledge base",
+                "text": (
+                    "Meningiomas commonly arise from the meninges surrounding "
+                    "the brain and spinal cord. Many are slow growing, but "
+                    "their clinical significance depends on size, location, "
+                    "mass effect, surrounding edema and associated symptoms."
+                ),
+            },
+            {
+                "id": "meningioma_management",
+                "category": "Meningioma",
+                "source": "Clinical knowledge base",
+                "text": (
+                    "Management of a suspected meningioma may include imaging "
+                    "surveillance, specialist consultation, surgery or other "
+                    "treatment depending on lesion characteristics and the "
+                    "patient's condition. Automated detection alone cannot "
+                    "determine the treatment plan."
+                ),
+            },
+            {
+                "id": "meningioma_urgency",
+                "category": "Meningioma",
+                "source": "Clinical knowledge base",
+                "text": (
+                    "A meningioma may require urgent assessment when there is "
+                    "significant mass effect, worsening neurological symptoms, "
+                    "seizures, visual disturbance or altered consciousness. "
+                    "Otherwise, specialist clinical review is generally "
+                    "required to determine appropriate follow-up."
+                ),
+            },
+            {
+                "id": "pituitary_definition",
+                "category": "Pituitary",
+                "source": "Clinical knowledge base",
+                "text": (
+                    "Pituitary tumors arise in or near the pituitary gland. "
+                    "They may affect hormone production or compress adjacent "
+                    "structures such as the optic pathways. Evaluation often "
+                    "includes dedicated pituitary MRI, endocrine testing and "
+                    "visual assessment."
+                ),
+            },
+            {
+                "id": "pituitary_management",
+                "category": "Pituitary",
+                "source": "Clinical knowledge base",
+                "text": (
+                    "A suspected pituitary lesion should be clinically "
+                    "correlated with endocrine symptoms, laboratory findings "
+                    "and visual function. Management may involve observation, "
+                    "medication, surgery or other specialist-directed care."
+                ),
+            },
+            {
+                "id": "pituitary_urgency",
+                "category": "Pituitary",
+                "source": "Clinical knowledge base",
+                "text": (
+                    "Sudden severe headache, acute visual loss, altered "
+                    "consciousness or signs of pituitary apoplexy require "
+                    "emergency medical evaluation. Stable suspected pituitary "
+                    "lesions still require specialist endocrine and imaging "
+                    "assessment."
+                ),
+            },
+            {
+                "id": "no_tumor_interpretation",
+                "category": "No Tumor",
+                "source": "Clinical knowledge base",
+                "text": (
+                    "A no-tumor model prediction means the detector did not "
+                    "identify one of its trained tumor classes in the supplied "
+                    "image. It does not exclude other abnormalities, small "
+                    "lesions, artifacts or findings outside the model's "
+                    "training scope."
+                ),
+            },
+            {
+                "id": "no_tumor_followup",
+                "category": "No Tumor",
+                "source": "Clinical knowledge base",
+                "text": (
+                    "The absence of an automated tumor detection should not "
+                    "replace formal radiological interpretation. Persistent "
+                    "or concerning symptoms should be evaluated by a qualified "
+                    "healthcare professional even when the model reports no "
+                    "tumor."
+                ),
+            },
+            {
+                "id": "mri_limitations",
+                "category": "General",
+                "source": "Clinical knowledge base",
+                "text": (
+                    "Automated MRI analysis may be affected by image quality, "
+                    "scan sequence, patient motion, acquisition differences, "
+                    "artifacts and dataset bias. Predictions must be treated "
+                    "as decision-support information rather than a confirmed "
+                    "diagnosis."
+                ),
+            },
+            {
+                "id": "clinical_safety",
+                "category": "General",
+                "source": "Clinical knowledge base",
+                "text": (
+                    "Clinical conclusions should combine imaging findings, "
+                    "patient history, symptoms, examination, laboratory data "
+                    "and specialist interpretation. An artificial intelligence "
+                    "system must not independently prescribe medication or "
+                    "replace a radiologist."
+                ),
+            },
+        ]
+
+    def _build_index(self) -> faiss.IndexFlatIP:
+        embeddings = self.embedding_model.encode(
+            self.document_texts,
+            convert_to_numpy=True,
+            normalize_embeddings=True,
+            show_progress_bar=False,
+        )
+
+        embeddings = np.asarray(
+            embeddings,
+            dtype=np.float32,
+        )
+
+        dimension = embeddings.shape[1]
+
+        index = faiss.IndexFlatIP(dimension)
+        index.add(embeddings)
+
+        return index
+
+    def search(
+        self,
+        query: str,
+        top_k: int = 4,
+        minimum_score: float = 0.20,
+    ) -> list[dict[str, Any]]:
+        if not query.strip():
+            return []
+
+        query_embedding = self.embedding_model.encode(
+            [query],
+            convert_to_numpy=True,
+            normalize_embeddings=True,
+            show_progress_bar=False,
+        )
+
+        query_embedding = np.asarray(
+            query_embedding,
+            dtype=np.float32,
+        )
+
+        number_of_results = min(top_k, len(self.documents))
+
+        scores, indices = self.index.search(
+            query_embedding,
+            number_of_results,
+        )
+
+        retrieved_documents: list[dict[str, Any]] = []
+
+        for score, index_position in zip(scores[0], indices[0]):
+            if index_position < 0:
+                continue
+
+            score_value = float(score)
+
+            if score_value < minimum_score:
+                continue
+
+            document = self.documents[int(index_position)]
+
+            retrieved_documents.append({
+                "id": document["id"],
+                "category": document["category"],
+                "source": document["source"],
+                "text": document["text"],
+                "score": round(score_value, 4),
+            })
+
+        return retrieved_documents
+
+    def get_context(
+        self,
+        detected_classes: list[str],
+        model_key: str = "brain_tumor",
+        top_k: int = 4,
+    ) -> list[dict[str, Any]]:
+        """
+        Preserve the interface already used by app.py.
+        """
+
+        if not detected_classes:
+            query = (
+                "Brain MRI analysis with no detection. Explain model "
+                "limitations, safe interpretation and appropriate follow-up."
+            )
+        else:
+            class_text = ", ".join(detected_classes)
+
+            query = (
+                f"Brain MRI model findings: {class_text}. "
+                "Retrieve clinically relevant information about the finding, "
+                "MRI interpretation, urgency, follow-up and safety limitations."
+            )
+
+        return self.search(
+            query=query,
+            top_k=top_k,
+        )

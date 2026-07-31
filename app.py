@@ -7,7 +7,7 @@ import os
 import uuid
 import time
 import base64
-from datetime import datetime
+from datetime import datetime, timezone
 
 from flask import Flask, request, jsonify, render_template, send_from_directory
 from werkzeug.utils import secure_filename
@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 from detector import TumorDetector
 from rag_engine import MedicalRAGEngine
 from llm_agent import BrainTumorLLMAgent
+from metadata_engine import MetadataEngine
 
 load_dotenv()
 
@@ -50,6 +51,7 @@ for key, meta in MODEL_REGISTRY.items():
 detector  = TumorDetector(MODEL_REGISTRY)
 rag       = MedicalRAGEngine()
 llm_agent = BrainTumorLLMAgent(api_key=os.environ.get("GOOGLE_API_KEY"))
+metadata_engine = MetadataEngine()
 
 sessions: dict = {}
 
@@ -95,7 +97,7 @@ def new_session():
     sid = str(uuid.uuid4())
     sessions[sid] = {
         "id":               sid,
-        "created_at":       datetime.utcnow().isoformat(),
+        "created_at":       datetime.now(timezone.utc).isoformat(),
         "detections":       [],
         "last_analysis":    "",
         "chat_history":     [],
@@ -127,7 +129,7 @@ def upload():
 
 @app.route("/api/detect", methods=["POST"])
 def detect():
-    
+
     """
     Step 1: Run YOLO26 + RAG retrieval.
     """
@@ -157,6 +159,15 @@ def detect():
 
     elapsed = round(time.time() - t0, 3)
 
+    elapsed_ms = int(elapsed * 1000)
+
+    metadata = metadata_engine.generate(
+        image_path=filepath,
+        detections=result["detections"],
+        model_label=meta["label"],
+        elapsed_ms=elapsed_ms,
+    )
+
     # ── RAG: use detected class names for retrieval ────────────────
     detected_classes = list({d["class"] for d in result["detections"]})
     rag_context      = rag.get_context(detected_classes, model_key)
@@ -176,16 +187,21 @@ def detect():
         sessions[session_id]["last_analysis"]    = ""
 
     return jsonify({
-        "success":       True,
-        "model":         model_key,
-        "model_label":   meta["label"],
-        "demo_mode":     not meta["available"],
-        "elapsed_ms":    int(elapsed * 1000),
-        "detections":    result["detections"],
-        "summary":       result["summary"],
-        "annotated_url": f"/results/{result_filename}" if result.get("annotated_image_b64") else None,
-        "rag_context":   rag_context,
-        "classes":       meta["classes"],
+        "success": True,
+        "model": model_key,
+        "model_label": meta["label"],
+        "demo_mode": not meta["available"],
+        "elapsed_ms": elapsed_ms,
+        "detections": result["detections"],
+        "summary": result["summary"],
+        "metadata": metadata,
+        "annotated_url": (
+            f"/results/{result_filename}"
+            if result.get("annotated_image_b64")
+            else None
+       ),
+        "rag_context": rag_context,
+        "classes": meta["classes"],
     })
 
 
@@ -319,4 +335,9 @@ def serve_result(filename):
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    app.run(
+        debug=True,
+        use_reloader=False,
+        host="0.0.0.0",
+        port=5000,
+    )
