@@ -181,7 +181,7 @@ async function runPipeline() {
 
   try {
     // Step 1: YOLO + RAG
-    setLabel('Running YOLOv8…');
+    setLabel('Running YOLOv26…');
     await stepAnim(['ps1', 'ps2']);
 
     const dr = await fetch('/api/detect', {

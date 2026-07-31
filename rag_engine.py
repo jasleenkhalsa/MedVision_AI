@@ -101,17 +101,17 @@ KNOWLEDGE_BASE = [
     },
     {
         "id": "yolo_brain_001",
-        "tags": ["yolov8", "detection", "brain_tumor", "ai"],
-        "title": "YOLOv8 Brain Tumor Detection — Model Notes",
+        "tags": ["yolov26", "detection", "brain_tumor", "ai"],
+        "title": "YOLOv26 Brain Tumor Detection — Model Notes",
         "content": (
-            "YOLOv8 (You Only Look Once v8) is a real-time object detection architecture by Ultralytics. "
+            "YOLOv26 (You Only Look Once v8) is a real-time object detection architecture by Ultralytics. "
             "For brain tumor detection, it classifies MRI slices into: Glioma, Meningioma, No Tumor, Pituitary. "
             "Model inputs: 350×350px resized MRI images. Output: bounding boxes + class + confidence score. "
             "Confidence threshold (default 0.25) filters low-confidence predictions. "
             "Performance metrics: mAP@50, precision, recall per class evaluated on held-out test set. "
             "Always validate AI predictions against radiologist review."
         ),
-        "source": "Ultralytics YOLOv8 Documentation",
+        "source": "Ultralytics YOLOv26 Documentation",
     },
 ]
 

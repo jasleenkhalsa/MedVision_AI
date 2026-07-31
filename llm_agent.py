@@ -281,7 +281,7 @@ If clinical, end with: "Please consult a qualified specialist." """
         classes = [d["class"] for d in detections] if detections else ["No finding"]
         top     = detections[0] if detections else None
         return f"""### Diagnosis
-YOLOv8 detected: **{', '.join(classes)}**
+YOLOv26 detected: **{', '.join(classes)}**
 {f"Confidence: **{top['confidence']*100:.1f}%**" if top else ""}
 
 ### Status

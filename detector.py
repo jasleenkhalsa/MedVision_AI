@@ -1,8 +1,8 @@
 """
-detector.py  —  YOLOv8 inference, accuracy-first
+detector.py  —  YOLOv26 inference, accuracy-first
 Key fixes vs previous version:
   1. No confidence threshold  →  conf=0.01 so YOLO itself decides
-  2. Image resized to 640x640 (what YOLOv8 was trained on), not arbitrary
+  2. Image resized to 640x640 (what YOLOv26 was trained on), not arbitrary
   3. Class names taken DIRECTLY from the model's own metadata, not hardcoded
   4. NMS (non-max-suppression) kept at default so overlapping boxes collapse
   5. Returns BEST single detection (highest conf) as the primary result
@@ -39,7 +39,7 @@ class TumorDetector:
     # ── Real inference ────────────────────────────────────────────
     def run(self, filepath: str, model_key: str) -> dict:
         """
-        Run YOLOv8 on filepath.
+        Run YOLOv26 on filepath.
         No confidence threshold — let the model return everything,
         then we show the top result.
         """
@@ -54,17 +54,18 @@ class TumorDetector:
         if img is None:
             raise ValueError(f"Cannot read image: {filepath}")
 
-        # Resize to 640 — standard YOLOv8 input size
+        # Resize to 640 — standard YOLOv26 input size
         img_640 = cv2.resize(img, (640, 640))
         img_rgb = cv2.cvtColor(img_640, cv2.COLOR_BGR2RGB)
 
         # Run with very low conf so we capture everything, no threshold hiding results
         results = model.predict(
-            img_rgb,
-            conf=0.25,       # no threshold — return all predictions
-            iou=0.45,        # standard NMS overlap threshold
+            source=img_rgb,
+            conf=0.25,
+            iou=0.45,
             verbose=False,
             imgsz=640,
+            device=0,      # Use NVIDIA GPU
         )
         result = results[0]
 

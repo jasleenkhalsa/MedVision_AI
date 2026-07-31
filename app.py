@@ -1,6 +1,6 @@
 """
-app.py — NeuraScan AI (v5)
-Pipeline: YOLOv8 (no threshold) → RAG retrieval → Gemini LLM
+app.py — MedVision AI
+Pipeline: YOLO26 → RAG Retrieval → LLM Clinical Report
 """
 
 import os
@@ -31,12 +31,12 @@ os.makedirs("models",   exist_ok=True)
 # ── Model Registry ─────────────────────────────────────────────────────────────
 MODEL_REGISTRY = {
     "brain_tumor": {
-        "label":       "Brain Tumor (YOLOv26)",
-        "model_path":  "models/brain_tumor_yolov26.pt",
-        "classes":     ["Glioma", "Meningioma", "No Tumor", "Pituitary"],
-        "icon":        "🧠",
+        "label": "Brain Tumor (YOLOv26)",
+        "model_path": "models/brain_tumor_yolo26.pt",
+        "classes": ["Glioma", "Meningioma", "No Tumor", "Pituitary"],
+        "icon": "🧠",
         "description": "Detects and classifies 4 brain tumor types from MRI scans",
-        "available":   False,
+        "available": False,
     },
 }
 
@@ -72,7 +72,7 @@ def status():
     return jsonify({
         "yolo_models":   {k: v["available"] for k, v in MODEL_REGISTRY.items()},
         "llm_available": llm_agent.available,
-        "llm_model":     f"Gemini ({llm_agent.available})",
+        "llm_model": "Qwen2.5 (Ollama)" if llm_agent.available else "Unavailable",
     })
 
 
@@ -127,9 +127,9 @@ def upload():
 
 @app.route("/api/detect", methods=["POST"])
 def detect():
+    
     """
-    Step 1: Run YOLOv8 (no threshold) + RAG retrieval.
-    Confidence slider removed — model decides everything.
+    Step 1: Run YOLO26 + RAG retrieval.
     """
     data       = request.json or {}
     filename   = data.get("filename")
@@ -196,7 +196,7 @@ def analyze():
     filename    = data.get("filename")
     detections  = data.get("detections", [])
     rag_context = data.get("rag_context", [])
-    model_label = data.get("model_label", "Brain Tumor YOLOv8")
+    model_label = data.get("model_label", "Brain Tumor YOLOv26")
     session_id  = data.get("session_id")
 
     if not filename:
@@ -245,7 +245,7 @@ def chat():
 
     analysis_summary = sess.get("last_analysis", "")
 
-    model_label      = sess.get("last_model_label", "Brain Tumor YOLOv8")
+    model_label      = sess.get("last_model_label", "Brain Tumor YOLOv26")
 
     image_path       = sess.get("last_image_path")
 
