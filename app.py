@@ -31,8 +31,8 @@ os.makedirs("models",   exist_ok=True)
 # ── Model Registry ─────────────────────────────────────────────────────────────
 MODEL_REGISTRY = {
     "brain_tumor": {
-        "label":       "Brain Tumor (YOLOv8)",
-        "model_path":  "models/brain_tumor_yolov8.pt",
+        "label":       "Brain Tumor (YOLOv26)",
+        "model_path":  "models/brain_tumor_yolov26.pt",
         "classes":     ["Glioma", "Meningioma", "No Tumor", "Pituitary"],
         "icon":        "🧠",
         "description": "Detects and classifies 4 brain tumor types from MRI scans",
